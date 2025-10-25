@@ -23,7 +23,7 @@ const toEmbed = (u?: string | null) => {
 }
 
 export default function LessonPage({ params }: { params: { id: string; lessonId: string } }) {
-    const courseId = params.id           // 👈 usar "id"
+    const courseId = params.id
     const lessonId = params.lessonId
 
     const [course, setCourse] = useState<Course | null>(null)

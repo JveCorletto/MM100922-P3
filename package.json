@@ -18,6 +18,7 @@
     "react-hook-form": "7.53.0",
     "react-hot-toast": "^2.6.0",
     "react-markdown": "^9.0.3",
+    "use-mobile": "^1.0.0",
     "zod": "3.23.8"
   },
   "devDependencies": {

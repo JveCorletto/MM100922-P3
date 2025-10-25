@@ -1,0 +1,504 @@
+-- ============================================================
+-- EduTrack AI — Esquema + RLS + Funciones + RPCs
+-- PostgreSQL / Supabase
+-- ============================================================
+
+-- ---------- Utilidades ----------
+create extension if not exists "pgcrypto";
+create extension if not exists "uuid-ossp";
+
+-- ============================================================
+-- 1) Tablas
+-- ============================================================
+
+-- Perfiles (1-1 con auth.users)
+create table if not exists public.profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  email text generated always as (nullif((auth.jwt() ->> 'email')::text, '') ) stored, -- opcional; no fiable si no hay JWT
+  full_name text,
+  role text not null default 'student' check (role in ('admin','tutor','student')),
+  created_at timestamptz not null default now()
+);
+
+-- Cursos
+create table if not exists public.courses (
+  id uuid primary key default uuid_generate_v4(),
+  title text not null,
+  description text,
+  video_url text,
+  is_published boolean not null default false,
+  tutor_id uuid not null references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_courses_tutor on public.courses(tutor_id);
+create index if not exists idx_courses_published on public.courses(is_published);
+
+-- Lecciones
+create table if not exists public.lessons (
+  id uuid primary key default uuid_generate_v4(),
+  course_id uuid not null references public.courses(id) on delete cascade,
+  title text not null,
+  body_md text,
+  material_url text,                -- ruta en Storage (bucket "materials")
+  video_url text,
+  sort_order integer not null default 1,
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_lessons_course on public.lessons(course_id);
+create index if not exists idx_lessons_sort on public.lessons(course_id, sort_order);
+
+-- Inscripciones
+create table if not exists public.enrollments (
+  id uuid primary key default uuid_generate_v4(),
+  course_id uuid not null references public.courses(id) on delete cascade,
+  student_id uuid not null references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  unique(course_id, student_id)
+);
+create index if not exists idx_enrollments_student on public.enrollments(student_id);
+create index if not exists idx_enrollments_course on public.enrollments(course_id);
+
+-- Lecciones completadas
+create table if not exists public.lesson_completions (
+  id uuid primary key default uuid_generate_v4(),
+  lesson_id uuid not null references public.lessons(id) on delete cascade,
+  student_id uuid not null references auth.users(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  unique(lesson_id, student_id)
+);
+create index if not exists idx_lc_student on public.lesson_completions(student_id);
+create index if not exists idx_lc_lesson on public.lesson_completions(lesson_id);
+
+-- (Opcional) Mensajes de chat por curso
+create table if not exists public.chat_messages (
+  id uuid primary key default uuid_generate_v4(),
+  course_id uuid not null references public.courses(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  body text not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists idx_chat_course on public.chat_messages(course_id);
+create index if not exists idx_chat_user on public.chat_messages(user_id);
+
+-- ============================================================
+-- 2) RLS (Row Level Security)
+-- ============================================================
+
+alter table public.profiles enable row level security;
+alter table public.courses enable row level security;
+alter table public.lessons enable row level security;
+alter table public.enrollments enable row level security;
+alter table public.lesson_completions enable row level security;
+alter table public.chat_messages enable row level security;
+
+-- Limpiar políticas previas (opcional, si estás iterando)
+-- drop policy if exists ... on public.profiles;   -- repite para todas si necesitas resetear
+
+
+-- ============================================================
+-- 3) Funciones helper (SECURITY DEFINER) para políticas
+--    Nota: NO usar estas funciones en la tabla profiles para evitar recursión.
+-- ============================================================
+
+-- ¿Usuario actual es admin?
+create or replace function public.is_admin()
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.profiles p
+    where p.id = auth.uid() and p.role = 'admin'
+  );
+$$;
+
+-- ¿Usuario actual es tutor?
+create or replace function public.is_tutor()
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.profiles p
+    where p.id = auth.uid() and p.role = 'tutor'
+  );
+$$;
+
+-- ¿Usuario es propietario (tutor) del curso?
+create or replace function public.is_course_owner(_course_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.courses c
+    where c.id = _course_id and c.tutor_id = auth.uid()
+  );
+$$;
+
+-- ¿Usuario está inscrito en el curso?
+create or replace function public.is_enrolled(_course_id uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.enrollments e
+    where e.course_id = _course_id and e.student_id = auth.uid()
+  );
+$$;
+
+
+-- ============================================================
+-- 4) Políticas (RLS) por tabla
+-- ============================================================
+
+-- PROFILES
+-- Reglas conservadoras para evitar recursión:
+-- - cada usuario ve/actualiza SOLO su perfil desde el cliente.
+drop policy if exists "profiles_self_select" on public.profiles;
+create policy "profiles_self_select"
+on public.profiles for select
+to authenticated
+using ( id = auth.uid() );
+
+drop policy if exists "profiles_self_update" on public.profiles;
+create policy "profiles_self_update"
+on public.profiles for update
+to authenticated
+using ( id = auth.uid() )
+with check ( id = auth.uid() );
+
+-- (Los admins pueden gestionar perfiles vía service role o desde el backend si se requiere)
+
+
+-- COURSES
+drop policy if exists "courses_public_or_owner_select" on public.courses;
+create policy "courses_public_or_owner_select"
+on public.courses for select
+to authenticated
+using (
+  is_published
+  or tutor_id = auth.uid()
+  or public.is_admin()
+);
+
+drop policy if exists "courses_insert_tutor_only" on public.courses;
+create policy "courses_insert_tutor_only"
+on public.courses for insert
+to authenticated
+with check ( public.is_tutor() and tutor_id = auth.uid() );
+
+drop policy if exists "courses_update_owner_or_admin" on public.courses;
+create policy "courses_update_owner_or_admin"
+on public.courses for update
+to authenticated
+using ( tutor_id = auth.uid() or public.is_admin() )
+with check ( tutor_id = auth.uid() or public.is_admin() );
+
+drop policy if exists "courses_delete_owner_or_admin" on public.courses;
+create policy "courses_delete_owner_or_admin"
+on public.courses for delete
+to authenticated
+using ( tutor_id = auth.uid() or public.is_admin() );
+
+
+-- LESSONS
+drop policy if exists "lessons_view_by_owner_or_enrolled_or_admin" on public.lessons;
+create policy "lessons_view_by_owner_or_enrolled_or_admin"
+on public.lessons for select
+to authenticated
+using ( public.is_course_owner(course_id) or public.is_enrolled(course_id) or public.is_admin() );
+
+drop policy if exists "lessons_insert_only_owner" on public.lessons;
+create policy "lessons_insert_only_owner"
+on public.lessons for insert
+to authenticated
+with check ( public.is_course_owner(course_id) or public.is_admin() );
+
+drop policy if exists "lessons_update_only_owner" on public.lessons;
+create policy "lessons_update_only_owner"
+on public.lessons for update
+to authenticated
+using ( public.is_course_owner(course_id) or public.is_admin() )
+with check ( public.is_course_owner(course_id) or public.is_admin() );
+
+drop policy if exists "lessons_delete_only_owner" on public.lessons;
+create policy "lessons_delete_only_owner"
+on public.lessons for delete
+to authenticated
+using ( public.is_course_owner(course_id) or public.is_admin() );
+
+
+-- ENROLLMENTS
+drop policy if exists "enrollments_select_self" on public.enrollments;
+create policy "enrollments_select_self"
+on public.enrollments for select
+to authenticated
+using ( student_id = auth.uid() or public.is_admin() );
+
+drop policy if exists "enrollments_insert_self_student" on public.enrollments;
+create policy "enrollments_insert_self_student"
+on public.enrollments for insert
+to authenticated
+with check ( student_id = auth.uid() );
+
+drop policy if exists "enrollments_delete_self_or_admin" on public.enrollments;
+create policy "enrollments_delete_self_or_admin"
+on public.enrollments for delete
+to authenticated
+using ( student_id = auth.uid() or public.is_admin() );
+
+
+-- LESSON_COMPLETIONS
+drop policy if exists "lc_select_self" on public.lesson_completions;
+create policy "lc_select_self"
+on public.lesson_completions for select
+to authenticated
+using ( student_id = auth.uid() or public.is_admin() );
+
+drop policy if exists "lc_insert_self_and_enrolled" on public.lesson_completions;
+create policy "lc_insert_self_and_enrolled"
+on public.lesson_completions for insert
+to authenticated
+with check (
+  student_id = auth.uid()
+  and exists (
+    select 1
+    from public.lessons l
+    where l.id = lesson_id
+      and public.is_enrolled(l.course_id)
+  )
+);
+
+drop policy if exists "lc_delete_self_or_admin" on public.lesson_completions;
+create policy "lc_delete_self_or_admin"
+on public.lesson_completions for delete
+to authenticated
+using ( student_id = auth.uid() or public.is_admin() );
+
+
+-- CHAT_MESSAGES (opcional)
+drop policy if exists "chat_select_enrolled_or_owner" on public.chat_messages;
+create policy "chat_select_enrolled_or_owner"
+on public.chat_messages for select
+to authenticated
+using ( public.is_course_owner(course_id) or public.is_enrolled(course_id) or public.is_admin() );
+
+drop policy if exists "chat_insert_enrolled_or_owner" on public.chat_messages;
+create policy "chat_insert_enrolled_or_owner"
+on public.chat_messages for insert
+to authenticated
+with check ( (user_id = auth.uid()) and (public.is_course_owner(course_id) or public.is_enrolled(course_id) or public.is_admin()) );
+
+drop policy if exists "chat_delete_owner_or_admin" on public.chat_messages;
+create policy "chat_delete_owner_or_admin"
+on public.chat_messages for delete
+to authenticated
+using ( user_id = auth.uid() or public.is_admin() );
+
+-- ============================================================
+-- 5) RPCs (Funciones de aplicación)
+-- ============================================================
+
+-- Crear lección
+create or replace function public.create_lesson(
+  _course_id uuid,
+  _title text,
+  _body text,
+  _material_url text,
+  _sort int,
+  _video_url text
+) returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  _id uuid := uuid_generate_v4();
+begin
+  if not public.is_course_owner(_course_id) and not public.is_admin() then
+    raise exception 'not allowed';
+  end if;
+
+  insert into public.lessons (id, course_id, title, body_md, material_url, sort_order, video_url)
+  values (_id, _course_id, _title, _body, _material_url, coalesce(_sort, 1), _video_url);
+
+  return _id;
+end;
+$$;
+
+-- Actualizar lección
+create or replace function public.update_lesson(
+  _lesson_id uuid,
+  _title text,
+  _body text,
+  _material_url text,
+  _sort int,
+  _video_url text
+) returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  _course uuid;
+begin
+  select course_id into _course from public.lessons where id = _lesson_id;
+  if _course is null then
+    raise exception 'lesson not found';
+  end if;
+  if not public.is_course_owner(_course) and not public.is_admin() then
+    raise exception 'not allowed';
+  end if;
+
+  update public.lessons
+  set title = coalesce(_title, title),
+      body_md = _body,
+      material_url = _material_url,
+      sort_order = coalesce(_sort, sort_order),
+      video_url = _video_url
+  where id = _lesson_id;
+end;
+$$;
+
+-- Borrar lección
+create or replace function public.delete_lesson(_lesson_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  _course uuid;
+begin
+  select course_id into _course from public.lessons where id = _lesson_id;
+  if _course is null then
+    raise exception 'lesson not found';
+  end if;
+  if not public.is_course_owner(_course) and not public.is_admin() then
+    raise exception 'not allowed';
+  end if;
+
+  delete from public.lessons where id = _lesson_id;
+end;
+$$;
+
+-- Mover lección (up/down)
+create or replace function public.move_lesson(
+  _course_id uuid,
+  _lesson_id uuid,
+  _dir text
+) returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  cur integer;
+  swap_id uuid;
+  swap_sort integer;
+begin
+  if not public.is_course_owner(_course_id) and not public.is_admin() then
+    raise exception 'not allowed';
+  end if;
+
+  select sort_order into cur from public.lessons where id = _lesson_id;
+  if cur is null then
+    raise exception 'lesson not found';
+  end if;
+
+  if _dir = 'up' then
+    select id, sort_order into swap_id, swap_sort
+    from public.lessons
+    where course_id = _course_id and sort_order < cur
+    order by sort_order desc limit 1;
+  else
+    select id, sort_order into swap_id, swap_sort
+    from public.lessons
+    where course_id = _course_id and sort_order > cur
+    order by sort_order asc limit 1;
+  end if;
+
+  if swap_id is not null then
+    update public.lessons set sort_order = swap_sort where id = _lesson_id;
+    update public.lessons set sort_order = cur where id = swap_id;
+  end if;
+end;
+$$;
+
+-- Progreso por curso para un estudiante (lista de inscripciones)
+create or replace function public.course_progress_for_student(_student uuid)
+returns table(
+  course_id uuid,
+  title text,
+  enrolled_at timestamptz,
+  total int,
+  completed int,
+  next_lesson_id uuid
+)
+language sql
+security definer
+set search_path = public
+as $$
+  select
+    e.course_id,
+    c.title,
+    e.created_at as enrolled_at,
+    (select count(*) from public.lessons l where l.course_id = e.course_id) as total,
+    (select count(*) from public.lesson_completions lc join public.lessons l on l.id = lc.lesson_id
+      where lc.student_id = _student and l.course_id = e.course_id) as completed,
+    (
+      select l2.id
+        from public.lessons l2
+       where l2.course_id = e.course_id
+         and not exists (
+               select 1 from public.lesson_completions lc2
+               where lc2.lesson_id = l2.id and lc2.student_id = _student
+             )
+       order by l2.sort_order asc
+       limit 1
+    ) as next_lesson_id
+  from public.enrollments e
+  join public.courses c on c.id = e.course_id
+  where e.student_id = _student
+  order by e.created_at desc;
+$$;
+
+grant execute on function public.course_progress_for_student(uuid) to authenticated;
+grant execute on function public.create_lesson(uuid,text,text,text,int,text) to authenticated;
+grant execute on function public.update_lesson(uuid,text,text,text,int,text) to authenticated;
+grant execute on function public.delete_lesson(uuid) to authenticated;
+grant execute on function public.move_lesson(uuid,uuid,text) to authenticated;
+
+-- ============================================================
+-- 6) Triggers útiles
+-- ============================================================
+
+-- Auto-crear profile al registrarse (si no lo tuvieras)
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.profiles(id, full_name, role)
+  values (new.id, new.raw_user_meta_data->>'full_name', coalesce(new.raw_user_meta_data->>'role','student'))
+  on conflict (id) do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();
+
+-- ============================================================
+-- FIN
+-- ============================================================
