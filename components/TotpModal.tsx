@@ -66,11 +66,9 @@ export default function TotpModal({
       if (!session?.session) return;
 
       const { data, error } = await supabase.auth.mfa.listFactors();
-      console.log("=== DEBUG: Factores al abrir modal ===", data);
       
       if (!error) {
         const pick = pickTotpId(data);
-        console.log("=== DEBUG: Factor seleccionado después de pickTotpId ===", pick);
         
         const hasVerifiedTotp = !! (pick.verified && pick.id);
         setActiveFactorId(pick.id);
@@ -96,13 +94,11 @@ export default function TotpModal({
     if (!newFactorId) return;
     
     try {
-      console.log("=== DEBUG: Verificando estado del factor antes de limpiar ===", newFactorId);
       const { data: factors } = await supabase.auth.mfa.listFactors();
       const factor = resolveTotpArray(factors).find(f => f.id === newFactorId);
       
       // Solo limpiar si el factor existe y NO está verificado
       if (factor && factor.status?.toLowerCase() !== "verified") {
-        console.log("=== DEBUG: Limpiando factor no verificado manualmente ===", newFactorId);
         await supabase.auth.mfa.unenroll({ factorId: newFactorId });
       } else {
         console.log("=== DEBUG: Factor está verificado, no se limpia ===", newFactorId);
@@ -123,7 +119,6 @@ export default function TotpModal({
   // Función específica para cancelar la activación (cuando ya hay QR generado)
   const handleCancelActivation = async () => {
     if (newFactorId) {
-      console.log("=== DEBUG: Cancelando activación TOTP, limpiando factor ===", newFactorId);
       await cleanupUnverifiedFactors();
     }
     onClose();
@@ -199,7 +194,6 @@ export default function TotpModal({
         setNewFactorId(data.id);
         setQrRaw(data.totp.qr_code ?? null);
         setOtpUri(data.totp.uri ?? null);
-        console.log("=== DEBUG: Nuevo factor creado ===", data.id);
       } else {
         throw new Error("El factor devuelto no es de tipo TOTP.");
       }

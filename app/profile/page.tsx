@@ -35,13 +35,10 @@ export default function ProfilePage() {
 
     // Verificar factores TOTP (estado VERIFIED)
     const { data: fData } = await supabase.auth.mfa.listFactors();
-    console.log("Factores TOTP:", fData); // Para debug
 
     const verifiedTotp = fData?.totp?.find(
       (f: any) => (f?.status || "").toLowerCase() === "verified"
     );
-
-    console.log("Factor verificado encontrado:", verifiedTotp); // Para debug
 
     // Usar SOLO el estado verificado para determinar si TOTP está activo
     const totpActive = !!verifiedTotp;
@@ -50,7 +47,6 @@ export default function ProfilePage() {
 
     // Sincronizar la BD si es necesario
     if (prof && totpActive !== prof.mfa_enabled) {
-      console.log("Sincronizando BD con estado TOTP:", totpActive);
       await supabase.from("profiles")
         .update({
           mfa_enabled: totpActive,
@@ -117,28 +113,14 @@ export default function ProfilePage() {
 
         <div>
           <label className="block text-sm font-medium">Nombre completo</label>
-          <input
-            className="input input-bordered w-full"
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-          />
+          <input className="input input-bordered w-full" value={fullName} onChange={(e) => setFullName(e.target.value)} />
         </div>
 
         <div className="flex gap-3">
-          <button className="btn btn-primary" onClick={onClickGuardar}>
-            Guardar cambios
-          </button>
-          <button
-            className={`btn ${hasTotp ? "btn-error" : "btn-outline"}`}
-            onClick={() => setShowTotp(true)}
-          >
+          <button className="btn btn-primary" onClick={onClickGuardar}> Guardar cambios </button>
+          <button className={`btn ${hasTotp ? "btn-error" : "btn-outline"}`} onClick={() => setShowTotp(true)}>
             {hasTotp ? "Desactivar TOTP" : "Activar TOTP"}
           </button>
-        </div>
-
-        {/* Estado actual para debug */}
-        <div className="text-sm text-gray-500">
-          Estado TOTP: {hasTotp ? "ACTIVADO" : "DESACTIVADO"} | Factor ID: {factorId || "Ninguno"}
         </div>
       </section>
 
@@ -155,13 +137,11 @@ export default function ProfilePage() {
         hasTotp={hasTotp}
         factorId={factorId}
         onTotpStateChange={(s) => {
-          console.log("=== DEBUG: Estado TOTP cambiado desde modal ===", s);
           setHasTotp(s.hasTotp);
           setFactorId(s.factorId);
 
           // FORZAR actualización de BD independientemente del estado de verificación
           if (userId) {
-            console.log("=== DEBUG: Forzando actualización de BD ===", s);
             supabase.from("profiles")
               .update({
                 mfa_enabled: s.hasTotp,
