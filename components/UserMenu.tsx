@@ -31,12 +31,9 @@ export default function UserMenu() {
         setIsOpen(false)
       }
     }
-
     if (isOpen) {
       document.addEventListener("mousedown", handleClickOutside)
-      return () => {
-        document.removeEventListener("mousedown", handleClickOutside)
-      }
+      return () => document.removeEventListener("mousedown", handleClickOutside)
     }
   }, [isOpen])
 
@@ -45,9 +42,7 @@ export default function UserMenu() {
     window.location.href = "/login"
   }
 
-  if (!mounted) {
-    return null
-  }
+  if (!mounted) return null
 
   if (!user) {
     return (
@@ -55,9 +50,7 @@ export default function UserMenu() {
         {/* Botón hamburguesa para móviles */}
         {isMobile && (
           <button
-            onClick={() => {
-              setIsOpen(!isOpen)
-            }}
+            onClick={() => setIsOpen(!isOpen)}
             className="md:hidden p-2 hover:bg-gray-100 rounded"
             aria-label="Toggle menu"
           >
@@ -92,14 +85,16 @@ export default function UserMenu() {
     )
   }
 
+  // Preferir nombre si existe en metadata; fallback al email
+  const displayName =
+    (user?.user_metadata && (user.user_metadata.name || user.user_metadata.full_name)) || user?.email
+
   return (
     <div className="relative" ref={menuRef}>
       {/* Botón hamburguesa para móviles */}
       {isMobile && (
         <button
-          onClick={() => {
-            setIsOpen(!isOpen)
-          }}
+          onClick={() => setIsOpen(!isOpen)}
           className="md:hidden p-2 hover:bg-gray-100 rounded"
           aria-label="Toggle menu"
         >
@@ -111,13 +106,16 @@ export default function UserMenu() {
 
       {/* Menú desktop */}
       <div className="hidden md:flex items-center gap-3">
-        <span className="text-sm opacity-80">{user?.email}</span>
-        <a className="text-sm underline" href="/dashboard">
+        {/* Ahora el correo/nombre es clickeable hacia /profile */}
+        <Link href="/profile" className="text-sm opacity-80 hover:underline">
+          {displayName}
+        </Link>
+        <Link className="text-sm underline" href="/dashboard">
           Dashboard
-        </a>
-        <a className="text-sm underline" href="/courses">
+        </Link>
+        <Link className="text-sm underline" href="/courses">
           Cursos
-        </a>
+        </Link>
         <button className="btn" onClick={logout}>
           Cerrar sesión
         </button>
@@ -125,22 +123,29 @@ export default function UserMenu() {
 
       {/* Menú móvil desplegable */}
       {isMobile && isOpen && (
-        <div className="absolute top-full right-0 bg-white border border-gray-200 rounded-md shadow-lg flex flex-col gap-2 p-3 text-sm z-50 mt-2 w-48 text-gray-900">
-          <span className="text-gray-600 px-2 py-1 text-xs font-semibold">{user?.email}</span>
-          <a
+        <div className="absolute top-full right-0 bg-white border border-gray-200 rounded-md shadow-lg flex flex-col gap-2 p-3 text-sm z-50 mt-2 w-56 text-gray-900">
+          {/* El encabezado ahora también te lleva a /profile */}
+          <Link
+            href="/profile"
+            onClick={() => setIsOpen(false)}
+            className="text-gray-700 px-2 py-1 text-xs font-semibold hover:bg-gray-100 rounded"
+          >
+            {displayName} — Mi perfil
+          </Link>
+          <Link
             className="text-blue-600 hover:text-blue-800 px-2 py-1 hover:bg-gray-100 rounded"
             href="/dashboard"
             onClick={() => setIsOpen(false)}
           >
             Dashboard
-          </a>
-          <a
+          </Link>
+          <Link
             className="text-blue-600 hover:text-blue-800 px-2 py-1 hover:bg-gray-100 rounded"
             href="/courses"
             onClick={() => setIsOpen(false)}
           >
             Cursos
-          </a>
+          </Link>
           <button
             className="btn w-full text-xs"
             onClick={() => {

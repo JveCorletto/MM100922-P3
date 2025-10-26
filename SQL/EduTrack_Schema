@@ -17,7 +17,9 @@ create table if not exists public.profiles (
   email text generated always as (nullif((auth.jwt() ->> 'email')::text, '') ) stored, -- opcional; no fiable si no hay JWT
   full_name text,
   role text not null default 'student' check (role in ('admin','tutor','student')),
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  mfa_enabled boolean not null default false,
+  mfa_factor_id text;
 );
 
 -- Cursos
