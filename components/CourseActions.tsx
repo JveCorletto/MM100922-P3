@@ -103,9 +103,6 @@ export default function CourseActions({ courseId, tutorId, isPublished }: Props)
                 Editar curso
               </Link>
             )}
-            <Link href={`/chat/${courseId}`} className="btn btn-primary btn-sm no-underline">
-              Ir al chat
-            </Link>
           </div>
         </div>
       </div>
@@ -136,9 +133,6 @@ export default function CourseActions({ courseId, tutorId, isPublished }: Props)
                 Ver progreso
               </Link>
             )}
-            <Link href={`/chat/${courseId}`} className="btn btn-outline btn-sm no-underline">
-              Ir al chat
-            </Link>
           </div>
         </div>
       </div>

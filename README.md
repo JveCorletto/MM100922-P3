@@ -1,244 +1,175 @@
-# **EduTrack AI — MVP (Next.js + Supabase + TOTP)**
+# **EduTrack AI — Plataforma Educativa Inteligente (Next.js + Supabase)**
 
-Plataforma web educativa con autenticación segura, gestión de cursos, roles diferenciados (Administrador, Tutor y Estudiante), lecciones con materiales descargables y control de progreso.
-Incluye autenticación multifactor (TOTP), chat en tiempo real por curso y dashboard independiente por rol.
-
+**EduTrack AI** es una aplicación web educativa con autenticación multifactor (TOTP), gestión de cursos, progreso de estudiantes, dashboards personalizados y un entorno de aprendizaje moderno con chat en tiempo real.
 Desarrollada con **Next.js 14**, **Supabase**, **TypeScript**, **TailwindCSS** y **React Hot Toast**.
 
 ---
 
-## 🚀 **1. Objetivo general**
+## 🧭 **1. Objetivo del proyecto**
 
-EduTrack AI permite que tutores publiquen cursos y gestionen sus lecciones (con videos, materiales y markdown), mientras los estudiantes se inscriben, visualizan su progreso y acceden al contenido de forma controlada.
-El sistema incorpora seguridad reforzada mediante autenticación multifactor (TOTP).
+Facilitar el aprendizaje en línea mediante una plataforma segura, dinámica y colaborativa que permita:
 
----
-
-## 🧱 **2. Tecnologías principales**
-
-| Tecnología                             | Uso                                                                        |
-| -------------------------------------- | -------------------------------------------------------------------------- |
-| **Next.js 14 (App Router)**            | Frontend React + SSR/SSG                                                   |
-| **TypeScript**                         | Tipado estático para consistencia y autocompletado                         |
-| **Supabase**                           | Backend completo: autenticación, base de datos (PostgreSQL), storage y RLS |
-| **TailwindCSS**                        | Estilos utilitarios y diseño responsivo                                    |
-| **React Hot Toast**                    | Notificaciones visuales de acciones del usuario                            |
-| **React Markdown**                     | Renderizado del contenido de lecciones                                     |
-| **Vercel**                             | Deploy automatizado del frontend                                           |
-| **Supabase Realtime / Edge Functions** | Chat en tiempo real y funciones RPC para lógica compleja                   |
+* A los **tutores**, crear y gestionar cursos completos con lecciones y materiales.
+* A los **estudiantes**, inscribirse, avanzar y llevar registro de su progreso.
+* A los **administradores**, mantener control sobre la visibilidad y seguridad del sistema.
 
 ---
 
-## ⚙️ **3. Estructura del sistema**
+## ⚙️ **2. Tecnologías y herramientas**
 
-### **Roles**
-
-* **Administrador:**
-
-  * Gestiona publicación/ocultamiento de cursos.
-  * Visualiza todos los usuarios.
-  * Accede a todos los dashboards.
-
-* **Tutor:**
-
-  * Crea, edita y elimina cursos.
-  * Administra lecciones (videos, materiales PDF, contenido en markdown).
-  * Reordena o publica cursos.
-  * No puede inscribirse como estudiante.
-
-* **Estudiante:**
-
-  * Se inscribe en cursos publicados.
-  * Avanza en las lecciones en orden (bloqueo secuencial).
-  * Puede marcar lecciones como completadas.
-  * Visualiza su progreso en porcentaje.
+| Tecnología                  | Uso principal                                          |
+| --------------------------- | ------------------------------------------------------ |
+| **Next.js 14 (App Router)** | Frontend React con SSR/SSG                             |
+| **Supabase**                | Backend (PostgreSQL, Auth, Storage, Realtime, RPCs)    |
+| **TypeScript**              | Tipado estático y robustez en el código                |
+| **TailwindCSS**             | Interfaz responsiva y en dark mode                     |
+| **React Hot Toast**         | Notificaciones visuales                                |
+| **React Markdown**          | Renderizado de contenido educativo en formato markdown |
+| **Vercel**                  | Deploy automatizado del frontend                       |
+| **Supabase MFA (TOTP)**     | Autenticación en dos pasos                             |
+| **Supabase Storage**        | Almacenamiento seguro de materiales (PDFs)             |
 
 ---
 
-## 🔐 **4. Autenticación y seguridad**
+## 🔐 **3. Autenticación y seguridad**
 
-### **Flujo de login**
-
-* Inicio de sesión con **correo + contraseña**.
-* Opción de login sin contraseña mediante **Magic Link** (correo).
-* Si el usuario activa la autenticación TOTP, deberá ingresar un **código de 6 dígitos** generado por su app autenticadora.
-
-### **TOTP (Two-Factor Authentication)**
-
-* Configurable desde `/settings/security`.
-* Usa `supabase.auth.mfa` para enrolar, verificar y desactivar.
-* Durante la inscripción a un curso, si el estudiante no tiene TOTP activo, **no puede inscribirse** hasta habilitarlo.
-* Compatible con Google Authenticator, Authy, Microsoft Authenticator.
+* Inicio de sesión con **correo y contraseña**.
+* Opción de inicio mediante **Magic Link (correo)**.
+* **Verificación en dos pasos (TOTP)** con Google Authenticator o Authy.
+* Si un estudiante intenta inscribirse a un curso sin tener TOTP activado, el sistema le obliga a activarlo antes.
+* Todas las tablas cuentan con **Row-Level Security (RLS)** y funciones helper (`is_admin()`, `is_tutor()`, `is_enrolled()`).
 
 ---
 
-## 🧩 **5. Módulos principales**
+## 👤 **4. Roles y permisos**
 
-### **1. Autenticación**
-
-* Rutas `/login` y `/register`.
-* Verificación de rol y sesión activa.
-* Middleware redirige si el usuario ya está autenticado.
-
-### **2. Cursos**
-
-* `/courses`: lista de cursos públicos.
-* `/course/[id]`: detalle del curso con:
-
-  * Video principal (iframe o URL embed).
-  * Lista de lecciones.
-  * Acciones condicionales por rol:
-
-    * **Tutor (propietario):** botón *Editar curso*.
-    * **Tutor (no propietario):** no puede inscribirse.
-    * **Estudiante inscrito:** botón *Ver progreso / Continuar*.
-    * **Administrador:** puede *ocultar o publicar* curso.
-
-### **3. Lecciones**
-
-* Contenido en **Markdown**.
-* Video adicional por lección (iframe embed).
-* Material adjunto (PDF almacenado en Supabase Storage).
-* Control de progreso: el estudiante no puede ver la siguiente lección sin completar la anterior.
-
-### **4. Dashboard**
-
-* `/dashboard/student`: muestra cursos inscritos y progreso (% lecciones completadas).
-* `/dashboard/tutor`: administración de cursos y lecciones (en modales).
-* `/dashboard/admin`: vista global de usuarios y control de publicación.
-
-### **5. Chat**
-
-* Comunicación en tiempo real entre inscritos de un curso.
-* Basado en **Supabase Realtime** y asociado a cada `courseId`.
-
-### **6. Seguridad**
-
-* `/settings/security`: configuración de autenticación multifactor (TOTP).
-* Escaneo de QR, verificación y desactivación con feedback visual.
+| Rol               | Permisos principales                                                                        |
+| ----------------- | ------------------------------------------------------------------------------------------- |
+| **Administrador** | Publicar/ocultar cursos, acceder a todos los dashboards, supervisar seguridad.              |
+| **Tutor**         | Crear, editar y eliminar cursos y lecciones, subir materiales, reordenar contenido.         |
+| **Estudiante**    | Inscribirse, completar lecciones en orden, visualizar progreso y acceder al chat del curso. |
 
 ---
 
-## 🧠 **6. Flujo IA mínima**
+## 🧩 **5. Funcionalidades principales**
 
-Endpoint experimental `POST /api/ia/summary`:
+### 🎓 **Cursos**
 
-* Si no hay clave (`OPENAI_API_KEY` o `GEMINI_API_KEY`): responde con resumen simulado.
-* Si se incluye clave: se conecta al proveedor real.
-  Usado como ejemplo de integración IA sin costos en el MVP.
+* Vista pública `/courses` con todos los cursos publicados.
+* Cada curso tiene:
+
+  * Descripción, video principal (iframe), y lista de lecciones.
+  * Validación según rol:
+
+    * Tutor (dueño): botón *Editar curso*.
+    * Tutor (externo): sin acceso a inscripción.
+    * Estudiante inscrito: *Continuar curso / Ver progreso*.
+    * Admin: *Publicar / Ocultar curso*.
+
+### 📘 **Lecciones**
+
+* Cada lección incluye:
+
+  * Título, video, contenido markdown y material PDF.
+  * Secuencia controlada: el estudiante no puede avanzar sin completar la anterior.
+* CRUD completo desde dashboard de tutor mediante modales.
+* Los materiales se almacenan en el bucket `materials` de Supabase Storage.
+
+### 📊 **Dashboard**
+
+* **Tutor:** administración de cursos, lecciones, materiales y reordenamiento.
+* **Estudiante:** lista de cursos inscritos con porcentaje de progreso y acceso directo.
+* **Admin:** control total del catálogo y usuarios.
+
+### 💬 **Chat por curso**
+
+* Implementado con Supabase Realtime.
+* Solo accesible por inscritos, tutores o administradores.
+
+### 🧠 **Módulo IA (demo)**
+
+* Endpoint `/api/ia/summary` que devuelve un resumen simulado.
+* Puede conectarse a Gemini o OpenAI mediante `OPENAI_API_KEY` o `GEMINI_API_KEY`.
 
 ---
 
-## 📂 **7. Estructura del proyecto**
+## 🧱 **6. Estructura del proyecto**
 
 ```
 /app
- ├── (auth)
- │    ├── login/
- │    └── register/
- ├── courses/
- │    ├── [id]/
- │    │    └── page.tsx
+ ├── (auth)/login/         → Login con password o Magic Link
+ ├── (auth)/register/      → Registro de usuario
+ ├── courses/              → Catálogo general
+ │    ├── [id]/page.tsx    → Detalle del curso
+ │    └── lesson/[id]/     → Lección individual
  ├── dashboard/
- │    ├── student/
- │    └── tutor/
- ├── settings/
- │    └── security/
- ├── api/
- │    ├── ia/
- │    ├── enroll/
- │    └── ...
+ │    ├── student/         → Mis cursos y progreso
+ │    └── tutor/           → Administración de cursos y lecciones
+ ├── settings/security/    → Configuración MFA (TOTP)
+ └── api/
+      ├── enroll/          → RPC para inscripciones
+      └── ia/summary/      → Endpoint IA
+
 /components
- ├── CourseActions.tsx
- ├── EnrollButton.tsx
- ├── ConfirmModal.tsx
- ├── LessonModal.tsx
- ├── RoleGate.tsx
- ├── ChatBox.tsx
- └── ...
+ ├── CourseActions.tsx     → Botones dinámicos según rol
+ ├── EnrollButton.tsx      → Manejo de inscripción y TOTP
+ ├── LessonModal.tsx       → Modal de creación/edición de lecciones
+ ├── ConfirmModal.tsx      → Confirmaciones de borrado
+ ├── ChatBox.tsx           → Chat en tiempo real
+ ├── RoleGate.tsx          → Control de acceso por rol
+ └── OpenMaterialButton.tsx→ Visualización de PDF
+
 /lib
- └── supabaseClient.ts
+ └── supabaseClient.ts     → Configuración central de Supabase
+
 /supabase
- ├── schema.sql
- ├── policies.sql
- └── functions/
-.env.local.example
-README.md
+ ├── schema.sql            → Tablas, políticas RLS y funciones RPC
+ └── policies.sql          → RLS avanzadas
 ```
 
 ---
 
-## 🧾 **8. Configuración de entorno**
-
-Variables necesarias en `.env.local`:
+## 🧾 **7. Instalación y ejecución**
 
 ```bash
-NEXT_PUBLIC_SUPABASE_URL=https://<your-project>.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=<your-anon-key>
-SUPABASE_SERVICE_KEY=<service-role-key> # para funciones RPC opcionales
-```
-
----
-
-## 🧑‍💻 **9. Instalación y ejecución**
-
-```bash
-# Instalar dependencias
 npm install
-
-# Ejecutar entorno local
 npm run dev
+```
 
-# Compilar para producción
-npm run build
-npm start
+Variables en `.env.local`:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=https://<proyecto>.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<clave_anonima>
+SUPABASE_SERVICE_KEY=<clave_service_role>
 ```
 
 ---
 
-## ☁️ **10. Deploy recomendado (Vercel + Supabase)**
+## 📜 **8. Funciones RPC personalizadas**
 
-1. Subir el repositorio a GitHub.
-2. Crear proyecto en **Vercel**, conectar el repo.
-3. Agregar variables de entorno desde Supabase.
-4. Crear bucket `materials` en Supabase Storage (privado).
-5. Ejecutar `schema.sql` en el editor SQL de Supabase.
-
----
-
-## 📚 **11. Características destacadas**
-
-* ✅ Autenticación por correo y magic link
-* 🔐 Verificación 2FA (TOTP) con QR
-* 🧑‍🏫 Roles dinámicos y paneles separados
-* 📚 Gestión completa de cursos y lecciones
-* 📦 Almacenamiento seguro de materiales PDF
-* 📈 Progreso de estudiante por curso
-* 💬 Chat en tiempo real
-* 🎥 Videos integrados por iframe
-* 🌙 Modo oscuro por defecto
-* ⚡ Interfaz rápida y responsiva (Tailwind + React 18)
+| Función                         | Descripción                                                      |
+| ------------------------------- | ---------------------------------------------------------------- |
+| `create_lesson()`               | Inserta una lección nueva con orden y validación de propietario. |
+| `update_lesson()`               | Modifica título, contenido, video o material PDF.                |
+| `delete_lesson()`               | Elimina lección y material asociado.                             |
+| `move_lesson()`                 | Reordena las lecciones del curso (↑ / ↓).                        |
+| `course_progress_for_student()` | Calcula progreso (% y siguiente lección).                        |
 
 ---
 
-## 🧩 **12. Funciones RPC personalizadas**
+## 🧠 **9. Seguridad avanzada (RLS)**
 
-* `create_lesson` → inserta una nueva lección asociada a curso y tutor.
-* `update_lesson` → actualiza título, contenido, video o material.
-* `delete_lesson` → elimina registro y material asociado.
-* `move_lesson` → cambia el orden de las lecciones.
-* `course_progress_for_student` → devuelve porcentaje completado y próxima lección.
+Cada tabla usa **Row Level Security**.
+Ejemplos:
 
----
-
-## 🛡️ **13. Políticas de seguridad (RLS)**
-
-* Solo el **tutor propietario** puede modificar sus cursos y lecciones.
-* Solo el **estudiante autenticado** puede ver sus inscripciones y progreso.
-* Los materiales (bucket `materials`) requieren **signed URLs** para acceso temporal.
+* Los estudiantes solo pueden ver sus propias inscripciones.
+* Los tutores solo pueden editar sus cursos y lecciones.
+* Los administradores pueden leer y modificar todo.
+* Los materiales (PDF) se acceden únicamente mediante **signed URLs** temporales.
 
 ---
 
-## 🧾 **14. Licencia**
+## 🧾 **10. Licencia**
 
-MIT © 2025 — Proyecto académico con fines educativos.
+© 2025 — Proyecto académico y formativo — **Universidad Francisco Gavidia (UFG)**.
