@@ -1,172 +1,141 @@
 # EduTrack AI — Plataforma Educativa Inteligente (Next.js + Supabase)
 
-## Descripción
-EduTrack AI es una plataforma educativa modular con autenticación, gestión de cursos/lecciones, inscripción de estudiantes, chat en tiempo real por curso, perfiles de tutor, emisión de diplomas en PDF y utilidades de IA para apoyo pedagógico. Construido con **Next.js 14 (App Router)**, **TypeScript**, **Supabase (Auth, DB, Realtime, Storage)**, **TailwindCSS** y **react-hot-toast**.
+> Monorepo simple (Next.js 14 App Router) con autenticación, roles, cursos, progreso, chat por curso, IA para resúmenes y emisión de diplomas en PDF. Lista para desplegar con Supabase.
 
----
+## 🧰 Stack
+- **Next.js 14 (App Router)** + **React 18** + **TypeScript**
+- **Supabase** (Auth, Postgres, RLS, Realtime)
+- **Tailwind CSS** (+ `@tailwindcss/typography`), `react-hot-toast`
+- **pdf-lib** (+ `@pdf-lib/fontkit`) para diplomas PDF
+- **@google/generative-ai** (opcional) para IA (resúmenes/assistant)
+- `next-themes`, `react-hook-form`, `react-markdown`, `zod`
 
-## ✨ Funcionalidades principales
-- **Autenticación Supabase**
-  - Registro, login y perfiles (`profiles`)
-  - Roles: **student**, **tutor**, **admin**
-  - **2FA TOTP** (activar/desactivar, verificación) desde `app/settings/security/page.tsx` y `components/TotpModal.tsx`
-- **Cursos y Lecciones**
-  - Listado de cursos (`/courses`), detalle de curso y navegación de lecciones
-  - Seguimiento de progreso con `lesson_completions`
-  - Materiales adjuntos por lección (PDF/links) con `materials`
-  - Inserción segura de videos (YouTube/Youtu.be → embed sanitisado)
-- **Inscripciones**
-  - Inscripción de estudiantes vía API `POST /api/enroll` (valida rol `student`)
-  - Registro en `enrollments`
-- **Chat por curso en tiempo real**
-  - Canal por curso con Supabase Realtime (`messages`, `course_chats`), componentes `ChatBox`/`CourseChat`
-- **Perfiles de Tutor**
-  - Gestión de perfil de tutor en `tutor_profiles` con modal de administración
-- **Diplomas en PDF**
-  - Generación de certificados vía `POST /api/generate-certificate` usando `pdf-lib`
-  - Guarda/relaciona en `course_diplomas`
-- **Asistente de curso con IA (opcional)**
-  - `POST /api/chat/course-assistant` con **Gemini** (`@google/generative-ai`)
-  - Endpoint de resumen `POST /api/ia/summary` (mock si no hay API key)
-- **Paneles por rol**
-  - `/dashboard` base y subpaneles: `/dashboard/student`, `/dashboard/tutor`, `/dashboard/admin`
-- **UI/UX**
-  - TailwindCSS, tema oscuro/claro (`next-themes`), notificaciones con `react-hot-toast`
+## ✨ Funcionalidades
+### Autenticación y seguridad
+- Registro/Login con Supabase y perfil en `public.profiles`
+- **Roles**: `student`, `tutor`, `admin` (UI y permisos por rol)
+- **2FA TOTP** desde **Settings → Security**  
+  - UI: `components/TotpModal.tsx` y `app/settings/security/page.tsx`
+  - Flujo: listar factor, activar (enrolar), verificar código, desactivar
+  - Persistencia de sesión vía `middleware.ts` con cookies de Supabase
 
----
+### Cursos, lecciones y materiales
+- Listado de cursos (`/courses`) con búsqueda
+- Detalle de curso: `/course/[id]`
+- Lecciones anidadas: `/course/[id]/lesson/[lessonId]`
+- Materiales (links/archivos) y **apertura controlada** (`OpenMaterialButton`)
+- **Progreso por lección** y **estado de curso completado**
+- **Inscripción** de estudiantes (`components/EnrollButton.tsx`, `app/api/enroll/route.ts`)
+- **Gestión para tutores**:
+  - Crear/editar curso y lecciones (`CourseActions`, `LessonModal`, `EditCourseButton`)
+  - **Publicar/ocultar** cursos (flag `is_published`)
+  - **Perfil de tutor** (`TutorProfileManagerModal`)
 
-## 🧱 Arquitectura de carpetas
-```
-app/
-  ├─ page.tsx                      # Home / Landin
-  ├─ login/ | register/            # Auth básica
-  ├─ profile/                      # Perfil usuario
-  ├─ settings/security/            # TOTP 2FA
-  ├─ courses/                      # Lista de cursos
-  ├─ course/[id]/                  # Detalle del curso
-  │   └─ lesson/[lessonId]/        # Lector de lecciones
-  ├─ chat/[courseId]/              # Chat por curso
-  ├─ dashboard/                    # Paneles por rol
-  │   ├─ admin/ | student/ | tutor/
-  │   └─ tutor/course/[id]/
-  └─ api/
-      ├─ enroll/route.ts                   # Inscribir estudiante
-      ├─ courses/route.ts                  # CRUD/búsquedas de cursos
-      ├─ generate-certificate/route.ts     # Diplomas PDF
-      ├─ chat/course-assistant/route.ts    # Tutor IA (Gemini)
-      └─ ia/summary/route.ts               # Resumen (mock/IA)
-components/
-  (EnrollButton, CourseActions, CourseChat, ChatBox, RoleGate,
-   TotpModal, TutorProfileManagerModal, DiplomaGenerator, SearchBar, UserMenu…)
-lib/
-  ├─ supabaseClient.ts   # Cliente del lado del cliente
-  └─ supabaseServer.ts   # SSR + cookies para API routes
-```
+### Chat por curso
+- Canal por curso con historial (`components/ChatBox.tsx`, `components/CourseChat.tsx`)
+- Endpoint: `app/api/chat/course-assistant/route.ts` (assistant IA opcional)
 
----
+### IA (resúmenes)
+- Endpoint `POST /api/ia/summary`  
+  - Si defines `GEMINI_API_KEY` u `OPENAI_API_KEY`, usa IA real
+  - Si no, retorna *mock* útil para desarrollo
 
-## 🗃️ Esquema de datos
-- `profiles`: perfil/rol del usuario
-- `courses`: catálogo de cursos
-- `lessons`: lecciones por curso
-- `materials`: recursos/archivos por lección
-- `enrollments`: inscripciones de estudiantes a cursos
-- `lesson_completions`: progresos por lección/estudiante
-- `messages` y `course_chats`: chat y canales por curso
-- `tutor_profiles`: datos públicos del tutor
-- `course_diplomas`: registros de diplomas emitidos
+### Diplomas en PDF
+- UI: `components/DiplomaGenerator.tsx`
+- API: `POST /api/generate-certificate` genera y devuelve un PDF (in‑memory) con bordes decorativos y texto (curso, alumno, fecha)
+- Registra emisión en `course_diplomas`
 
-> **RLS**: el proyecto está preparado para **Row Level Security**. Asegura que:
-> - los estudiantes solo acceden a su progreso/inscripciones;
-> - los tutores solo gestionan sus cursos/lecciones;
-> - los admins tienen lectura/escritura amplia;
-> - materiales sensibles se sirven con **signed URLs** si usas Storage.
+## 🗃️ Esquema de base de datos (Supabase/Postgres)
+Tablas principales detectadas en `supabase/schema.sql`:
+- `public.profiles` — usuario, `role`, `full_name`, `avatar_url`
+- `public.courses` — curso, `tutor_id`, metadata y `is_published`
+- `public.lessons` — lecciones por curso, orden, contenido/recursos
+- `public.enrollments` — relación estudiante↔curso
+- `public.messages` — chat por curso (autor, contenido, timestamps)
+- `public.orders` — base para compras (buyer_id, course_id, estado) *(opcional en MVP)*
 
----
+> **RLS y Policies**: 14 políticas activas. Lectura/escritura acotada por `auth.uid()` y rol; tutores solo ven/gestionan sus recursos; estudiantes, los suyos. *Admins* con amplitud de lectura. (Ver `supabase/schema.sql`).
+
+## 🔌 API Endpoints
+- `POST /api/enroll` — inscribir estudiante en un curso (requiere `role=student` y sesión)
+- `GET /api/courses` — listado/búsqueda de cursos (paginable/filtrable)
+- `POST /api/generate-certificate` — genera diploma PDF (requiere sesión)
+- `POST /api/chat/course-assistant` — assistant del curso (IA opcional)
+- `POST /api/ia/summary` — resumen de texto (IA real o *mock*)
+
+## 🧭 Rutas de la App (App Router)
+- `/` — Home
+- `/login`, `/register`, `/profile`
+- `/settings/security` — 2FA TOTP
+- `/courses` — catálogo
+- `/course/[id]` — detalle del curso
+- `/course/[id]/lesson/[lessonId]` — lección
+- `/chat/[courseId]` — chat del curso
+- `/dashboard` — selector por rol
+  - `/dashboard/student`
+  - `/dashboard/tutor`, `/dashboard/tutor/course/[id]`
+  - `/dashboard/admin`
 
 ## 🔐 Variables de entorno
 Crea `.env.local` con:
+```env
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY= # para scripts/seed o tareas admin (no en cliente)
+# IA (opcional, define al menos una)
+GOOGLE_API_KEY=
 ```
-NEXT_PUBLIC_SUPABASE_URL=...
-NEXT_PUBLIC_SUPABASE_ANON_KEY=...
-SUPABASE_SERVICE_ROLE_KEY=...
+> Usa el **anon key** en cliente y **service role** solo en backend/CLI.
 
-# IA (opcional)
-GOOGLE_API_KEY=...            # para /api/chat/course-assistant
-```
-
----
-
-## 🛠️ Requisitos (hardware y software)
-- **Software**
-  - Node.js 18+ (recomendado 20.x)
-  - npm 9+ o pnpm/yarn
-  - Cuenta y proyecto en **Supabase** (Auth, DB, Realtime; opcional Storage)
-- **Hardware (desarrollo)**
-  - 2 CPU lógicos, 4 GB RAM mín. (8 GB recomendado para DX fluida)
-  - 1–2 GB de espacio para dependencias/archivos
-- **Producción (orientativo)**
-  - Vercel/Node server + Supabase gestionado
-  - Escala según concurrencia; Realtime depende del volumen de mensajes
-
----
-
-## 🚀 Puesta en marcha
+## 🚀 Puesta en marcha (local)
 ```bash
 # 1) Dependencias
 npm install
 
-# 2) Variables
-cp .env.example .env.local   # si existe
-# completa SUPABASE_URL/ANON y llaves IA (opcional)
+# 2) Variables de entorno
+cp .env.local.example .env.local
+# completa SUPABASE_URL / ANON_KEY desde tu proyecto
 
-# 3) Servidor dev
+# 3) Base de datos
+# Opción A: Supabase proyecto en la nube → copiar `supabase/schema.sql`
+# Opción B: Supabase local → ejecutar el SQL en el dashboard SQL editor
+
+# 4) Desarrollo
 npm run dev
-
-# 4) Build / Producción
-npm run build && npm start
 ```
 
-### Inicializar Supabase
-1) Crea el proyecto en Supabase y pega URL + ANON en `.env.local`  
-2) Habilita **Auth** (email), **Realtime** y configura Storage si usarás materiales privados  
-3) Crea tablas según sección *Esquema de datos* (o tus migraciones)  
-4) Activa **RLS** y define políticas por rol (student/tutor/admin)  
-5) En **Auth → MFA**, habilita **TOTP**
+## 🧱 Componentes clave
+- `RoleGate.tsx`, `Protected.tsx` — guardias por rol y sesión
+- `CourseActions.tsx` — gestión de curso (publicar, progreso, etc.)
+- `LessonModal.tsx` — CRUD de lecciones
+- `EnrollButton.tsx` — flujo de inscripción
+- `CourseChat.tsx`, `ChatBox.tsx` — chat por curso
+- `TotpModal.tsx` — activación/verificación/desactivación TOTP
+- `DiplomaGenerator.tsx` — trigger para PDFs
+- `UserMenu.tsx` — menú responsivo con estado de sesión
+
+## 🧪 Notas de prueba
+- Flujos sensibles (inscripción, edición, TOTP) requieren sesión válida
+- Para probar IA sin clave, el endpoint de *summary* responde un *mock* útil
+- Asegura `is_published=true` para ver cursos en el catálogo público
+
+## 🗺️ Roadmap sugerido
+- Suscripciones/pagos reales (usar `orders`), webhooks
+- Storage con **signed URLs** para materiales privados
+- Métricas de aprendizaje, rubricas por lección y feedback del tutor
+- Notificaciones Realtime para chat/progreso
 
 ---
 
-## 🔌 Endpoints API (resumen)
-- `POST /api/enroll` → body: `{ course_id }` · requiere usuario `student`
-- `GET/POST /api/courses` → listado/creación/actualizaciones (según implementación)
-- `POST /api/generate-certificate` → Bearer token (Supabase) + `{ courseId, studentName, completionDate }` → PDF
-- `POST /api/chat/course-assistant` → `{ courseId, lessonId, ... }` → respuesta Gemini
-- `POST /api/ia/summary` → `{ text }` → resumen (usa clave de IA si está configurada; si no, mock)
-
----
-
-## 🧩 Scripts
-- `npm run dev` → desarrollo
-- `npm run build` → build
-- `npm start` → producción
-- `npm run lint` → linter
-
----
-
-## ✅ Checklist de verificación
-- [ ] `.env.local` con Supabase + claves IA
-- [ ] Tablas creadas y RLS activas según roles
-- [ ] Auth y TOTP habilitados en Supabase
-- [ ] Realtime activo para `messages`
-- [ ] Prueba de diploma PDF desde panel/curso
-- [ ] Asistente IA responde (si configuraste la clave)
-
----
-
-## 📄 Licencia
-© 2025 — Uso académico/formativo (UFG) por André Martínez
+### Créditos
+EduTrack AI — MVP académico orientado a **“Analizando las necesidades de Hardware y Software”** con enfoque en arquitectura mínima viable, seguridad con RLS y trazabilidad de aprendizaje.
 
 ---
 
 ### Créditos tecnológicos
 Next.js 14 · Supabase · TypeScript · TailwindCSS · react-hot-toast · @google/generative-ai · pdf-lib
+
+---
+
+## 📄 Licencia
+© 2025 — Uso académico/formativo (UFG) por André Martínez
