@@ -162,7 +162,7 @@ export default function CourseActions({ courseId, tutorId, isPublished, courseNa
       }
 
       // Llamar a la API para generar el diploma - ENDPOINT CORRECTO
-      const response = await fetch('/api/certificates/generate', {  // ← Endpoint corregido
+      const response = await fetch('/api/certificates-generate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
