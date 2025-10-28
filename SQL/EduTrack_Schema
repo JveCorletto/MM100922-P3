@@ -87,6 +87,35 @@ create table course_chats (
 create index course_chats_user_course_lesson_idx on course_chats(user_id, course_id, lesson_id);
 create index course_chats_created_at_idx on course_chats(created_at);
 
+-- Ejecuta esto en Supabase SQL Editor
+create table tutor_profiles (
+  id uuid default gen_random_uuid() primary key,
+  course_id uuid references courses(id) on delete cascade,
+  specialty text not null,
+  tone text default 'educativo',
+  expertise_level text default 'intermedio',
+  teaching_style text default 'practico',
+  custom_instructions text,
+  created_at timestamp with time zone default timezone('utc'::text, now()),
+  updated_at timestamp with time zone default timezone('utc'::text, now()),
+  
+  unique(course_id)
+);
+
+-- Trigger para updated_at
+create or replace function update_updated_at()
+returns trigger as $$
+begin
+  new.updated_at = timezone('utc'::text, now());
+  return new;
+end;
+$$ language plpgsql;
+
+create trigger update_tutor_profiles_updated_at
+  before update on tutor_profiles
+  for each row
+  execute function update_updated_at();
+
 
 -- ============================================================
 -- 2) RLS (Row Level Security)

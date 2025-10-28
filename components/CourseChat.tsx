@@ -100,28 +100,24 @@ export default function CourseChat({
 
         setMessages(prev => [...prev, userMsg])
 
-        // En el handleSubmit del CourseChat.tsx, reemplaza todo el try-catch con:
         try {
             const { data: { user } } = await supabase.auth.getUser()
             if (!user) throw new Error('Usuario no autenticado')
 
-            // Guardar mensaje del usuario en la base de datos (opcional, puedes comentar esto temporalmente)
-            /*
+            // Guardar mensaje del usuario
             const { error: userMsgError } = await supabase
-              .from('course_chats')
-              .insert({
-                course_id: courseId,
-                lesson_id: lessonId,
-                user_id: user.id,
-                role: 'user',
-                content: userMessage
-              })
-          
+                .from('course_chats')
+                .insert({
+                    course_id: courseId,
+                    lesson_id: lessonId,
+                    user_id: user.id,
+                    role: 'user',
+                    content: userMessage
+                })
+
             if (userMsgError) {
-              console.error('Error guardando mensaje:', userMsgError)
-              // Continuar aunque falle el guardado
+                console.error('Error guardando mensaje:', userMsgError)
             }
-            */
 
             // Llamar a la API
             const response = await fetch('/api/chat/course-assistant', {
@@ -134,15 +130,20 @@ export default function CourseChat({
                     lessonId,
                     courseTitle,
                     lessonTitle,
-                    lessonContent,
-                    materialUrl,
-                    videoUrl,
+                    lessonContent: lessonContent || '',
+                    materialUrl: materialUrl || '',
+                    videoUrl: videoUrl || '',
                     message: userMessage,
-                    chatHistory: messages.slice(-6)
+                    chatHistory: messages.slice(-6).map(msg => ({
+                        role: msg.role,
+                        content: msg.content
+                    }))
                 })
             })
 
             if (!response.ok) {
+                const errorText = await response.text()
+                console.error('Error response:', errorText)
                 throw new Error(`Error ${response.status}: ${response.statusText}`)
             }
 
@@ -150,6 +151,21 @@ export default function CourseChat({
 
             if (!data.response) {
                 throw new Error('Respuesta vacía del servidor')
+            }
+
+            // Guardar respuesta del asistente
+            const { error: assistantMsgError } = await supabase
+                .from('course_chats')
+                .insert({
+                    course_id: courseId,
+                    lesson_id: lessonId,
+                    user_id: user.id,
+                    role: 'assistant',
+                    content: data.response
+                })
+
+            if (assistantMsgError) {
+                console.error('Error guardando respuesta:', assistantMsgError)
             }
 
             // Agregar respuesta de la IA
@@ -162,33 +178,26 @@ export default function CourseChat({
 
             setMessages(prev => [...prev, assistantMsg])
 
-            // Guardar respuesta en la base de datos (opcional)
-            /*
-            const { error: assistantMsgError } = await supabase
-              .from('course_chats')
-              .insert({
-                course_id: courseId,
-                lesson_id: lessonId,
-                user_id: user.id,
-                role: 'assistant',
-                content: data.response
-              })
-          
-            if (assistantMsgError) {
-              console.error('Error guardando respuesta:', assistantMsgError)
-            }
-            */
-
         } catch (error: any) {
-            console.error('Error in chat:', error)
-
+            console.error('Error completo en el chat:', error)
+            
+            // Mensaje de error más específico
             let errorMessage = '¡Hola! Soy tu tutor IA. '
-            errorMessage += 'Actualmente estoy en modo de demostración y puedo ayudarte con:\n\n'
+            
+            if (error.message.includes('404') || error.message.includes('No se pudo encontrar')) {
+                errorMessage += 'Parece que el endpoint del asistente no está disponible temporalmente. '
+            } else if (error.message.includes('500')) {
+                errorMessage += 'Hay un problema temporal con el servidor. '
+            } else if (error.message.includes('network') || error.message.includes('fetch')) {
+                errorMessage += 'Hay un problema de conexión. '
+            }
+            
+            errorMessage += 'Mientras se resuelve, puedo ayudarte con:\n\n'
             errorMessage += '• Explicaciones de conceptos\n'
             errorMessage += '• Guías paso a paso\n'
             errorMessage += '• Ejemplos prácticos\n'
             errorMessage += '• Resolución de dudas\n\n'
-            errorMessage += '¿En qué puedo asistirte con la lección actual?'
+            errorMessage += '¿En qué puedo asistirte con esta lección?'
 
             const errorMsg: Message = {
                 id: (Date.now() + 1).toString(),
@@ -197,6 +206,9 @@ export default function CourseChat({
                 timestamp: new Date()
             }
             setMessages(prev => [...prev, errorMsg])
+            
+            // Mostrar toast con el error real para debugging
+            toast.error(`Error: ${error.message}`)
         } finally {
             setIsLoading(false)
         }
@@ -210,12 +222,34 @@ export default function CourseChat({
         }
     }
 
-    // Asegúrate de que el componente retorne JSX válido
-    if (!isEnrolled) {
-        return null // Esto está bien - retorna null explícitamente
+    // Limpiar el chat
+    const clearChat = async () => {
+        try {
+            const { data: { user } } = await supabase.auth.getUser()
+            if (!user) return
+
+            const { error } = await supabase
+                .from('course_chats')
+                .delete()
+                .eq('course_id', courseId)
+                .eq('lesson_id', lessonId)
+                .eq('user_id', user.id)
+
+            if (error) {
+                console.error('Error clearing chat:', error)
+            }
+
+            setMessages([])
+            toast.success('Chat limpiado')
+        } catch (error) {
+            console.error('Error clearing chat:', error)
+        }
     }
 
-    // El return principal debe estar aquí
+    if (!isEnrolled) {
+        return null
+    }
+
     return (
         <>
             {/* Botón flotante */}
@@ -247,14 +281,25 @@ export default function CourseChat({
                                 <p className="text-gray-400 text-xs">{lessonTitle}</p>
                             </div>
                         </div>
-                        <button
-                            onClick={() => setIsOpen(false)}
-                            className="text-gray-400 hover:text-white transition-colors"
-                        >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={clearChat}
+                                className="text-gray-400 hover:text-white transition-colors p-1"
+                                title="Limpiar chat"
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                            </button>
+                            <button
+                                onClick={() => setIsOpen(false)}
+                                className="text-gray-400 hover:text-white transition-colors p-1"
+                            >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
                     </div>
 
                     {/* Mensajes */}
