@@ -63,17 +63,11 @@ export async function POST(request: NextRequest) {
 
         // Verificar autenticación usando el token
         const { data: { user }, error: authError } = await supabase.auth.getUser(token)
-
         if (authError || !user) {
             console.log('❌ Error verificando token:', authError)
             return NextResponse.json({ error: 'Token inválido' }, { status: 401 })
         }
-
-        console.log('✅ Usuario autenticado:', user.email)
-
         const { courseId, studentName, completionDate } = await request.json()
-
-        console.log('🔍 Verificando curso:', courseId)
 
         // Obtener información del curso
         const { data: courseData, error: courseError } = await supabaseAdmin
@@ -98,8 +92,6 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Curso sin lecciones' }, { status: 400 })
         }
 
-        console.log('📚 Lecciones encontradas:', lessons.length)
-
         // Obtener lecciones completadas por el usuario
         const { data: completedLessons, error: completionsError } = await supabaseAdmin
             .from('lesson_completions')
@@ -111,18 +103,13 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Error al verificar el progreso' }, { status: 500 })
         }
 
-        console.log('✅ Completiones encontradas:', completedLessons?.length || 0)
-
         // Filtrar lecciones completadas que pertenecen a este curso
         const lessonIds = lessons.map(lesson => lesson.id)
         const completedInThisCourse = completedLessons?.filter(cl =>
             lessonIds.includes(cl.lesson_id)
         ) || []
 
-        console.log('🎯 Completadas en este curso:', completedInThisCourse.length)
-
         const isCourseCompleted = completedInThisCourse.length === lessons.length
-
         if (!isCourseCompleted) {
             return NextResponse.json({
                 error: `Curso no completado. Has completado ${completedInThisCourse.length} de ${lessons.length} lecciones.`
@@ -136,11 +123,22 @@ export async function POST(request: NextRequest) {
             .eq('id', courseData.tutor_id)
             .single()
 
-        console.log('🎓 Generando diploma para:', studentName)
+        // Obtener información del perfil del estudiante
+        const { data: studentProfile } = await supabaseAdmin
+            .from('profiles')
+            .select('full_name')
+            .eq('id', user.id)
+            .single()
+
+        const finalStudentName = studentName?.trim() ||
+            studentProfile?.full_name ||
+            user.user_metadata?.full_name ||
+            user.email?.split('@')[0] ||
+            'Estudiante'
 
         // Generar el PDF del diploma
         const pdfBytes = await generatePDFDiploma({
-            studentName: studentName || user.user_metadata?.full_name || user.email?.split('@')[0] || 'Estudiante',
+            studentName: finalStudentName,
             courseName: courseData.title,
             completionDate: completionDate || new Date().toISOString(),
             tutorName: tutorData?.full_name || 'Tutor',
@@ -342,7 +340,7 @@ async function generatePDFDiploma({
         borderWidth: 3,
         borderColor: rgb(0.8, 0.1, 0.1),
     })
-    
+
     page.drawLine({
         start: { x: width / 2 - 8, y: height - 515 },
         end: { x: width / 2 - 2, y: height - 525 },

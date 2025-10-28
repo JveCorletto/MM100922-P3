@@ -341,85 +341,179 @@ export default function TotpModal({
   const ringIntensity = remaining <= 5 ? "ring-4" : remaining <= 10 ? "ring-2" : "ring-1";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="w-full max-w-md rounded-xl bg-white p-6 space-y-4">
-        <h2 className="text-lg font-semibold text-black">
-          {hasTotp ? "Desactivar TOTP" : "Activar TOTP"}
-        </h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 sm:px-6">
+      <div className="w-full max-w-md rounded-xl bg-white dark:bg-gray-800 p-4 sm:p-6 space-y-4 sm:space-y-6 shadow-lg border border-gray-200 dark:border-gray-700">
+        {/* Header */}
+        <div className="text-center sm:text-left">
+          <h2 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white">
+            {hasTotp ? "Desactivar autenticación en dos pasos" : "Activar autenticación en dos pasos"}
+          </h2>
+          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+            {hasTotp 
+              ? "Para desactivar, ingresa tu código de verificación actual" 
+              : "Protege tu cuenta con autenticación en dos pasos"
+            }
+          </p>
+        </div>
 
         {!hasTotp ? (
           !qrSrc ? (
-            <div className="space-y-3">
-              <p className="text-sm text-gray-600">
-                Activaremos TOTP con Google Authenticator. Genera el QR y escanéalo.
-              </p>
-              <div className="flex justify-end gap-2">
-                <button className="btn btn-ghost" onClick={handleCancel}>
+            // Configuración inicial
+            <div className="space-y-4">
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                <div className="flex items-start space-x-3">
+                  <svg className="w-5 h-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div>
+                    <p className="text-sm text-blue-800 dark:text-blue-200 font-medium">¿Qué necesitas?</p>
+                    <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
+                      Una aplicación autenticadora como Google Authenticator, Authy, o Microsoft Authenticator.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3 pt-2">
+                <button 
+                  className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-200 py-2.5 px-4 rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
+                  onClick={handleCancel}
+                  disabled={loading}
+                >
                   Cancelar
                 </button>
                 <button 
-                  className="btn btn-primary" 
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2.5 px-4 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
                   onClick={enrollTotp} 
                   disabled={loading}
                 >
-                  {loading ? "Generando..." : "Generar QR"}
+                  {loading ? (
+                    <div className="flex items-center justify-center">
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                      Generando QR...
+                    </div>
+                  ) : (
+                    "Generar código QR"
+                  )}
                 </button>
               </div>
             </div>
           ) : (
-            <div className="space-y-3">
-              <div className={`mx-auto inline-block rounded-lg ring-blue-500 ${ringIntensity} transition-all`}>
-                <img src={qrSrc} alt="TOTP QR" className="rounded border max-w-full h-auto" />
+            // Verificación del código
+            <div className="space-y-4">
+              {/* Código QR */}
+              <div className="flex flex-col items-center space-y-4">
+                <div className={`bg-white p-4 rounded-lg border-2 border-gray-200 dark:border-gray-600 ${ringIntensity} ring-blue-500 transition-all`}>
+                  <img src={qrSrc} alt="Código QR para autenticación" className="w-48 h-48 sm:w-56 sm:h-56" />
+                </div>
+                
+                <div className="text-center space-y-2">
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    Escanea este código QR con tu aplicación autenticadora
+                  </p>
+                  <div className="text-sm text-gray-500 dark:text-gray-400">
+                    El código cambia en <span className="font-semibold text-blue-600 dark:text-blue-400">{remaining}s</span>
+                  </div>
+                </div>
               </div>
-              <div className="text-center text-sm text-gray-700">
-                Código cambia en <span className="font-semibold">{remaining}s</span>
+
+              {/* Input de verificación */}
+              <div className="space-y-3">
+                <label htmlFor="totp-code" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Código de verificación de 6 dígitos
+                </label>
+                <input
+                  id="totp-code"
+                  className="w-full px-3 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 transition-colors text-center text-lg font-mono tracking-widest"
+                  placeholder="123-456"
+                  value={formattedCode}
+                  onChange={(e) => setCode(e.target.value)}
+                  inputMode="numeric"
+                  maxLength={7}
+                />
               </div>
-              <p className="text-sm text-gray-600">Escribe el código de 6 dígitos de Google Authenticator:</p>
-              <input
-                className="input input-bordered w-full text-center tracking-widest"
-                placeholder="XXX-XXX"
-                value={formattedCode}
-                onChange={(e) => setCode(e.target.value)}
-                inputMode="numeric"
-              />
-              <div className="flex justify-end gap-2">
+
+              {/* Botones de acción */}
+              <div className="flex flex-col sm:flex-row gap-3 pt-2">
                 <button 
-                  className="btn btn-ghost" 
+                  className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-200 py-2.5 px-4 rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
                   onClick={handleCancelActivation}
                   disabled={loading}
                 >
-                  Cancelar Activación
+                  Cancelar
                 </button>
                 <button
-                  className="btn btn-primary"
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2.5 px-4 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
                   onClick={verifyTotp}
                   disabled={loading || code.replace(/\D/g, "").length !== 6}
                 >
-                  {loading ? "Verificando..." : "Verificar y Activar"}
+                  {loading ? (
+                    <div className="flex items-center justify-center">
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                      Verificando...
+                    </div>
+                  ) : (
+                    "Verificar y activar"
+                  )}
                 </button>
               </div>
             </div>
           )
         ) : (
-          <div className="space-y-3">
-            <p className="text-sm text-gray-600">Para desactivar, valida tu TOTP actual:</p>
-            <input
-              className="input input-bordered w-full text-center tracking-widest"
-              placeholder="XXX-XXX"
-              value={formattedCode}
-              onChange={(e) => setCode(e.target.value)}
-              inputMode="numeric"
-            />
-            <div className="flex justify-end gap-2">
-              <button className="btn btn-ghost" onClick={onClose}>
+          // Desactivar TOTP
+          <div className="space-y-4">
+            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+              <div className="flex items-start space-x-3">
+                <svg className="w-5 h-5 text-yellow-600 dark:text-yellow-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+                <div>
+                  <p className="text-sm text-yellow-800 dark:text-yellow-200 font-medium">¿Estás seguro?</p>
+                  <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
+                    Desactivar la autenticación en dos pasos reduce la seguridad de tu cuenta.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Input de verificación */}
+            <div className="space-y-3">
+              <label htmlFor="disable-totp-code" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                Código de verificación actual
+              </label>
+              <input
+                id="disable-totp-code"
+                className="w-full px-3 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 transition-colors text-center text-lg font-mono tracking-widest"
+                placeholder="123-456"
+                value={formattedCode}
+                onChange={(e) => setCode(e.target.value)}
+                inputMode="numeric"
+                maxLength={7}
+              />
+            </div>
+
+            {/* Botones de acción */}
+            <div className="flex flex-col sm:flex-row gap-3 pt-2">
+              <button 
+                className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-200 py-2.5 px-4 rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
+                onClick={onClose}
+                disabled={loading}
+              >
                 Cancelar
               </button>
               <button
-                className="btn btn-error"
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2.5 px-4 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 dark:focus:ring-offset-gray-800"
                 onClick={disableTotp}
                 disabled={loading || code.replace(/\D/g, "").length !== 6}
               >
-                {loading ? "Desactivando..." : "Desactivar"}
+                {loading ? (
+                  <div className="flex items-center justify-center">
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                    Desactivando...
+                  </div>
+                ) : (
+                  "Desactivar"
+                )}
               </button>
             </div>
           </div>

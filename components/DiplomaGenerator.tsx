@@ -31,25 +31,44 @@ export default function DiplomaGenerator({
 
     setIsGenerating(true)
     try {
-      // Aquí generamos el diploma (por ahora simulamos la generación)
-      // En producción, usarías una librería como pdf-lib o un servicio externo
-      const diplomaData = {
-        courseTitle,
-        studentName: studentName.trim(),
-        completionDate: new Date().toLocaleDateString('es-ES'),
-        diplomaId: `DIP-${Date.now()}`
+      // Obtener el token de sesión
+      const { data: { session } } = await supabase.auth.getSession()
+
+      if (!session) {
+        throw new Error('No hay sesión activa')
       }
 
-      // Simular generación de PDF/Imagen
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      
-      // Guardar referencia del diploma en la base de datos
+      // Llamar a la API route para generar el diploma
+      const response = await fetch('/api/certificates/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          courseId,
+          studentName: studentName.trim(), // ← Esto es importante
+          completionDate: new Date().toISOString()
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Error al generar diploma')
+      }
+
+      // Obtener el PDF como blob
+      const pdfBlob = await response.blob()
+      const pdfUrl = URL.createObjectURL(pdfBlob)
+
+      // Guardar referencia en la base de datos
       const { data, error } = await supabase
         .from('course_diplomas')
         .insert({
           course_id: courseId,
           student_id: studentId,
-          diploma_url: JSON.stringify(diplomaData) // En producción sería la URL del archivo
+          diploma_url: pdfUrl,
+          generated_at: new Date().toISOString()
         })
         .select()
         .single()
@@ -57,10 +76,10 @@ export default function DiplomaGenerator({
       if (error) throw error
 
       toast.success('¡Diploma generado exitosamente!')
-      onDiplomaGenerated(JSON.stringify(diplomaData))
+      onDiplomaGenerated(pdfUrl)
       onClose()
       setStudentName('')
-      
+
     } catch (error: any) {
       console.error('Error generating diploma:', error)
       toast.error('Error al generar el diploma: ' + error.message)
@@ -77,9 +96,9 @@ export default function DiplomaGenerator({
         <h3 className="text-xl font-bold text-gray-900 dark:text-white">
           Generar Diploma
         </h3>
-        
+
         <p className="text-gray-600 dark:text-gray-400 text-sm">
-          Felicitaciones por completar el curso <strong>{courseTitle}</strong>. 
+          Felicitaciones por completar el curso <strong>{courseTitle}</strong>.
           Ingresa tu nombre para generar tu diploma de finalización.
         </p>
 
