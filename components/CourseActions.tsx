@@ -146,8 +146,23 @@ export default function CourseActions({ courseId, tutorId, isPublished, courseNa
         throw new Error('Token de acceso no válido')
       }
 
+      // Obtener el perfil del usuario para conseguir su nombre
+      const { data: { user } } = await supabase.auth.getUser()
+      let studentName = ''
+
+      if (user) {
+        // Intentar obtener el nombre del perfil
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('full_name')
+          .eq('id', user.id)
+          .single()
+
+        studentName = profile?.full_name || user.user_metadata?.full_name || user.email?.split('@')[0] || ''
+      }
+
       // Llamar a la API para generar el diploma - ENDPOINT CORRECTO
-      const response = await fetch('/api/generate-certificate', {
+      const response = await fetch('/api/certificates/generate', {  // ← Endpoint corregido
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -155,7 +170,7 @@ export default function CourseActions({ courseId, tutorId, isPublished, courseNa
         },
         body: JSON.stringify({
           courseId,
-          studentName: 'André Martínez' // Puedes personalizar esto
+          studentName: studentName // ← Nombre real del usuario
         }),
       })
 
