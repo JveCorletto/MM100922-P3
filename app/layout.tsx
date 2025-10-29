@@ -8,6 +8,9 @@ import { Toaster } from "react-hot-toast";
 export const metadata: Metadata = {
   title: "EduTrack AI",
   description: "EduTrack AI — Next.js + Supabase",
+  icons: {
+    icon: "/images/EduTrackLogo_noBG.png",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
