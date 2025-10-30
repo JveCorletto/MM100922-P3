@@ -1,61 +1,95 @@
-flowchart LR
-    subgraph Client["**Cliente (Browser)**"]
-        direction TB
-        A("Next.js 14 App Router\nSesiones con cookies seguras SSR"):::primary
+flowchart TB
+    %% USUARIOS
+    USERS["*Usuarios Finales*<br/>Estudiantes & Tutores"]
+    
+    %% CLIENTE
+    subgraph CLIENT_LAYER["*Capa Cliente*"]
+        BROWSER["*Navegador Web*<br/>- Next.js 14 SSR<br/>- Sesiones con cookies seguras<br/>- WebSockets para chat en tiempo real"]
     end
-
-    subgraph Vercel["**Vercel · Next.js 14 (App Router)**"]
-        VM("Runtime: Node.js Serverless\nAPI Routes + Middleware SSR\n- Autenticación Supabase SSR\n- Generación diplomas pdf-lib\n- Endpoints IA: /api/ia/summary, /api/chat/course-assistant\n- SSR sin ISR en páginas públicas"):::primary
+    
+    %% EDGE / CDN
+    subgraph EDGE_LAYER["*Capa Edge*"]
+        VERCEL_CDN["*CDN Vercel (Edge)*<br/>- Assets estáticos<br/>- CSS, JS, Imágenes<br/>- Caching global"]
+        
+        subgraph EDGE_FUNCTIONS["*Edge Functions*"]
+            MIDDLEWARE["*Middleware SSR*<br/>- Autenticación<br/>- Routing"]
+        end
     end
-
-    CDN["**CDN Vercel**\nAssets estáticos: CSS · JS · Imágenes\nCaching en edge"]:::storage
-
-    subgraph Supabase["**Supabase - us-east-2 (NANO)**"]
-        direction TB
-        AUTH{"Supabase Auth\n- Email verification\n- Magic Link\n- 2FA TOTP obligatorio:\n  - Tutores: crear/modificar cursos\n  - Estudiantes: inscripción cursos"}:::secondary
-
-        DB(("Supabase Postgres")):::db
-        DB_CONTENT["profiles · courses · lessons\nenrollments · messages · course_diplomas\n- RLS: rol/ownership\n- Backups automáticos NANO"]:::db_content
-
-        STG[["Supabase Storage\n- Bucket privado: materials\n- RLS: tutor owner / estudiantes enrolled\n- Estructura: materials/{course_id}/{lesson_id}/{file}\n- Signed URLs (60 min)"]]:::storage
-
-        RT(["Supabase Realtime\n- Chat por curso exclusivamente\n- Sin notificaciones/presencia"]):::realtime
-
-        DB --> DB_CONTENT
+    
+    %% COMPUTE
+    subgraph COMPUTE_LAYER["*Capa de Computación*"]
+        subgraph SERVERLESS["*Vercel Serverless*"]
+            API_ROUTES["*API Routes*<br/>Runtime: Node.js<br/>- /api/ia/summary<br/>- /api/chat/course-assistant<br/>- Generación diplomas (pdf-lib)"]
+            
+            SSR["*Server-Side Rendering*<br/>- Páginas públicas sin ISR<br/>- Autenticación Supabase SSR"]
+        end
     end
-
-    AI[">Gemini (Google AI)\n- Producción: modelo real\n- Desarrollo: mock sin API Key\n- Límite: 32k tokens/request"]:::external
-
-    OBS("Observabilidad & Seguridad\n- Vercel Analytics + Supabase Logs\n- Secrets: Env Vars Vercel/Supabase\n- RPS: < 10 req/s\n- Archivos: 5-20MB promedio"):::observability
-
-    PAY("Roadmap: Pasarela Pagos\n- PayPal / Wompy\n- Integración en API Routes existentes"):::external
-
-    %% Connection Arrows
-    A -->|HTTPS| VM
-    VM --> CDN
-    VM -->|"Auth SSR Middleware"| AUTH
-    VM -->|"CRUD (RLS)"| DB
-    VM -->|"Storage API"| STG
-    VM -->|"Realtime Subscription"| RT
-    VM -->|HTTP/JSON| AI
-    VM -.->|Monitoreo| OBS
-    VM -->|Futura integración| PAY
-    OBS -. logs .- Supabase
-
-    %% Classes for theme
-    classDef primary fill:#e1f5fe,stroke:#01579b,stroke-width:2px
-    classDef secondary fill:#ede7f6,stroke:#512da8,stroke-width:2.5px
-    classDef storage fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+    
+    %% DATABASE & STORAGE
+    subgraph DATA_LAYER["*Capa de Datos - Supabase (us-east-2)*"]
+        subgraph AUTH_SERVICE["*Servicio de Autenticación*"]
+            AUTH["*Supabase Auth*<br/>- Email verification<br/>- Magic Link<br/>- 2FA TOTP obligatorio"]
+        end
+        
+        subgraph DATABASE["*Base de Datos*"]
+            POSTGRES["*PostgreSQL Cluster*<br/>NANO Tier<br/>- Backups automáticos"]
+            
+            RLS["*Row Level Security*<br/>- Políticas por rol/ownership<br/>- profiles, courses, lessons<br/>- enrollments, messages"]
+        end
+        
+        subgraph STORAGE["*Almacenamiento*"]
+            STORAGE_BUCKET["*Supabase Storage*<br/>- Bucket privado: materials<br/>- materials/{course_id}/{lesson_id}/<br/>- Signed URLs (60min)"]
+        end
+        
+        subgraph REALTIME["*Servicios en Tiempo Real*"]
+            REALTIME_SVC["*Supabase Realtime*<br/>- WebSockets<br/>- Chat por curso<br/>- Sin notificaciones/presencia"]
+        end
+    end
+    
+    %% EXTERNAL SERVICES
+    subgraph EXTERNAL_LAYER["*Servicios Externos*"]
+        AI_SERVICE["*Google AI - Gemini*<br/>- Producción: modelo real<br/>- Desarrollo: mock<br/>- Límite: 32k tokens/request"]
+        
+        PAYMENT["*Pasarelas de Pago*<br/>(Roadmap)<br/>- PayPal<br/>- Wompy"]
+    end
+    
+    %% MONITORING
+    subgraph OBSERVABILITY["*Observabilidad*"]
+        MONITORING["*Sistema de Monitoreo*<br/>- Vercel Analytics<br/>- Supabase Logs<br/>- Secrets: Env Vars<br/>- RPS: < 10 req/s"]
+    end
+    
+    %% CONEXIONES PRINCIPALES
+    USERS -->|HTTPS| BROWSER
+    BROWSER -->|SSR Requests| EDGE_FUNCTIONS
+    BROWSER -->|WebSockets| REALTIME_SVC
+    
+    EDGE_FUNCTIONS -->|Serverless Invocations| SERVERLESS
+    EDGE_FUNCTIONS -->|Static Assets| VERCEL_CDN
+    
+    SERVERLESS -->|Auth Requests| AUTH_SERVICE
+    SERVERLESS -->|Database Queries| DATABASE
+    SERVERLESS -->|Storage Operations| STORAGE
+    SERVERLESS -->|AI API Calls| AI_SERVICE
+    SERVERLESS -->|Future Integration| PAYMENT
+    
+    AUTH_SERVICE -->|User Validation| DATABASE
+    REALTIME_SVC -->|Database Changes| DATABASE
+    
+    %% MONITORING CONNECTIONS
+    SERVERLESS -.->|Metrics & Logs| MONITORING
+    DATA_LAYER -.->|Database Logs| MONITORING
+    
+    %% STYLING
+    classDef client fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    classDef edge fill:#bbdefb,stroke:#0277bd,stroke-width:2px
+    classDef compute fill:#c8e6c9,stroke:#388e3c,stroke-width:2px
+    classDef data fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
     classDef external fill:#fff3e0,stroke:#ff9800,stroke-width:2px
-    classDef db fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
-    classDef db_content fill:#ede7f6,stroke:#6a1b9a,stroke-width:2px
-    classDef observability fill:#e3f2fd,stroke:#1976d2,stroke-width:2px,stroke-dasharray: 2 2
-    classDef realtime fill:#ffe0b2,stroke:#e65100,stroke-width:2px
-
-    class Client,Vercel primary
-    class Supabase secondary
-    class CDN,STG storage
-    class AI,PAY external
-    class DB,DB_CONTENT db,db_content
-    class OBS observability
-    class RT realtime
+    classDef monitoring fill:#e3f2fd,stroke:#1976d2,stroke-width:2px,stroke-dasharray: 2 2
+    
+    class BROWSER,CLIENT_LAYER client
+    class EDGE_LAYER,EDGE_FUNCTIONS edge
+    class COMPUTE_LAYER,SERVERLESS compute
+    class DATA_LAYER,AUTH_SERVICE,DATABASE,STORAGE,REALTIME data
+    class EXTERNAL_LAYER,AI_SERVICE,PAYMENT external
+    class OBSERVABILITY,MONITORING monitoring
